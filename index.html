@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TalkNik Coconut Catcher</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Righteous&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            overflow: hidden; 
+            font-family: 'Bungee', cursive;
+            background: #4dbcf9; 
+        }
+
+        /* निसर्ग रम्य Background */
+        #gameCanvas {
+            display: block;
+            background: linear-gradient(to bottom, #29abe2 0%, #ffffff 100%);
+            cursor: none;
+        }
+
+        /* Branded Full Title - Colorful & Vibrant */
+        #main-header {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .brand-text {
+            font-family: 'Righteous', cursive;
+            font-size: clamp(28px, 7vw, 60px);
+            /* Colorful Gradient (Yellow -> Orange -> Red) */
+            background: linear-gradient(to bottom, #FFFB00 0%, #FF9100 50%, #FF3C00 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            /* White and Blue Stroke for Pop */
+            -webkit-text-stroke: 1px white;
+            filter: drop-shadow(4px 4px 0px rgba(0,77,188,0.6));
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* Score Display */
+        #score-box {
+            position: absolute;
+            top: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px 25px;
+            border-radius: 50px;
+            font-size: 20px;
+            color: #5d4037;
+            border: 3px solid #8d6e63;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+
+        /* Game Over Screen */
+        #game-over {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 50px;
+            text-align: center;
+            border-radius: 30px;
+            box-shadow: 0 0 100px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 100;
+        }
+
+        #game-over h1 { 
+            font-size: 48px; 
+            color: #d32f2f; 
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 24px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            font-family: 'Bungee', cursive;
+            transition: 0.3s;
+        }
+        button:hover { background: #388E3C; transform: scale(1.1); }
+    </style>
+</head>
+<body>
+
+<div id="main-header">
+    <div class="brand-text">TalkNik Coconut Catcher</div>
+</div>
+
+<div id="score-box">🥥 COCONUTS: <span id="score">0</span></div>
+
+<div id="game-over">
+    <h1>GAME OVER!</h1>
+    <p style="font-size: 26px; color: #5d4037; margin-bottom: 20px;">
+        Final Score: <span id="final-score">0</span>
+    </p>
+    <button onclick="location.reload()">PLAY AGAIN</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<audio id="catchAudio" src="https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3"></audio>
+<audio id="failAudio" src="https://assets.mixkit.co/active_storage/sfx/2004/2004-preview.mp3"></audio>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const gameOverScreen = document.getElementById('game-over');
+    const finalScoreEl = document.getElementById('final-score');
+    const catchSound = document.getElementById('catchAudio');
+    const failSound = document.getElementById('failAudio');
+
+    let score = 0;
+    let gameActive = true;
+    let basket = { x: 0, y: 0, w: 130, h: 90 };
+    let coconuts = [];
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        basket.y = canvas.height - 130;
+        basket.x = canvas.width / 2 - 65;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Controls
+    function handleMove(e) {
+        if(!gameActive) return;
+        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        basket.x = clientX - basket.w / 2;
+        if(basket.x < 0) basket.x = 0;
+        if(basket.x > canvas.width - basket.w) basket.x = canvas.width - basket.w;
+    }
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); }, {passive: false});
+
+    // Drawing
+    function drawCoconut(x, y) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, 28, 0, Math.PI * 2);
+        let grad = ctx.createRadialGradient(x-7, y-7, 5, x, y, 28);
+        grad.addColorStop(0, '#a1887f'); grad.addColorStop(1, '#5d4037');
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = '#3e2723'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#3e2723';
+        for(let i=0; i<3; i++) {
+            ctx.beginPath(); ctx.arc(x - 7 + (i*7), y - 12 + (i*2), 3.5, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    function drawBasket(x, y, w, h) {
+        ctx.save();
+        ctx.fillStyle = '#8d6e63';
+        ctx.beginPath();
+        ctx.moveTo(x, y); ctx.lineTo(x + w, y);
+        ctx.quadraticCurveTo(x + w, y + h, x + w/2, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y);
+        ctx.fill();
+        ctx.strokeStyle = '#5d4037'; ctx.lineWidth = 6; ctx.stroke();
+        // Woven effect
+        ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 2;
+        for(let i=20; i<w; i+=25) {
+            ctx.beginPath(); ctx.moveTo(x+i, y); ctx.lineTo(x+i, y+h-10); ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    function spawn() {
+        if(!gameActive) return;
+        coconuts.push({
+            x: Math.random() * (canvas.width - 80) + 40,
+            y: -60,
+            speed: 5 + Math.random() * 5
+        });
+        setTimeout(spawn, Math.max(350, 1000 - (score * 20))); 
+    }
+
+    function update() {
+        if(!gameActive) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        drawBasket(basket.x, basket.y, basket.w, basket.h);
+
+        for (let i = coconuts.length - 1; i >= 0; i--) {
+            let c = coconuts[i];
+            c.y += c.speed;
+            drawCoconut(c.x, c.y);
+
+            if (c.y + 28 > basket.y && c.y < basket.y + 30 &&
+                c.x > basket.x && c.x < basket.x + basket.w) {
+                score++;
+                scoreEl.innerText = score;
+                catchSound.currentTime = 0;
+                catchSound.play();
+                coconuts.splice(i, 1);
+                continue;
+            }
+
+            if (c.y > canvas.height) {
+                gameActive = false;
+                failSound.play();
+                gameOverScreen.style.display = 'block';
+                finalScoreEl.innerText = score;
+            }
+        }
+        requestAnimationFrame(update);
+    }
+
+    // Initialize
+    spawn();
+    update();
+
+</script>
+</body>
+</html>
